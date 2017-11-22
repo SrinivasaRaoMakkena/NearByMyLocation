@@ -107,6 +107,9 @@ public static double distnceNear;
 
                 lat.setText(Double.toString(longitudePresent));
                 longi.setText(Double.toString(latitudePresent));
+
+
+
                // address = getCompleteAddressString(latitude, longitude);
             }
 

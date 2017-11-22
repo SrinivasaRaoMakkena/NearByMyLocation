@@ -64,7 +64,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private double dest_lattitude;
     private double dest_longitude;
 
+   // com.example.srinivas.nearMainActivity mainActivity;
+
     TextView Distance;
+    private LocationManager locationManager;
+    private LocationListener listener;
+    private double latitudePresent;
+    private double longitudePresent;
 
     private int getNodeIndex(NodeList nl, String nodename) {
         for (int i = 0; i < nl.getLength(); i++) {
@@ -201,26 +207,145 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        //request code --> 1
+        //permissions array , we do haVE ONLY ONE PERMISSION
+        //PERMISSION RESULT
+
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, listener);
+            } else {
+                return;
+            }
+
+        }
+
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-
-
-Intent intent = getIntent();
-        start_lattitude = intent.getDoubleExtra("myLatitude",0.0);
-        start_longitude = intent.getDoubleExtra("myLongitude",0.0);
+        Intent intent = getIntent();
+        //   start_lattitude = intent.getDoubleExtra("myLatitude",0.0);
+        //  start_longitude = intent.getDoubleExtra("myLongitude",0.0);
         dest_lattitude =  intent.getDoubleExtra("lattitudeDest",30.3074624);
         dest_longitude = intent.getDoubleExtra("longitudeDest",-98.0335976);
-
-        Toast.makeText(getApplicationContext(),intent.getDoubleExtra("lattitude",30.3074624) + " " + intent.getDoubleExtra("longitude",-98.0335976),Toast.LENGTH_SHORT).show();
+        start_lattitude = latitudePresent;
+        start_longitude = longitudePresent;
+        Toast.makeText(getApplicationContext(),start_lattitude + " " + start_longitude,Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(),intent.getDoubleExtra("lattitudeDest",30.3074624) + " " + intent.getDoubleExtra("longitudeDest",-98.0335976),Toast.LENGTH_SHORT).show();
 
         String theUrl = "http://maps.googleapis.com/maps/api/directions/xml?"
                 + "origin=" + start_lattitude + "," + start_longitude
                 + "&destination=" + dest_lattitude + "," + dest_longitude
                 + "&sensor=false&units=metric&mode=driving";
         Log.d("url", theUrl);
+
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+
+        //configure_button();
+        listener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                latitudePresent = location.getLatitude();
+                longitudePresent = location.getLongitude();
+
+                String theUrl = "http://maps.googleapis.com/maps/api/directions/xml?"
+                        + "origin=" + latitudePresent + "," + longitudePresent
+                        + "&destination=" + dest_lattitude + "," + dest_longitude
+                        + "&sensor=false&units=metric&mode=driving";
+
+                String output="";
+                DownloadTask downloadTask = new DownloadTask();
+                try {
+                    output = downloadTask.execute(theUrl).get();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    e.printStackTrace();
+                }
+                Log.i("Output",output);
+                mMap.animateCamera(CameraUpdateFactory.newLatLng(new LatLng(location.getLatitude(), location.getLongitude())));
+
+
+                PolylineOptions rectLine = new PolylineOptions().width(20).color(
+                        Color.BLUE);
+
+                for (int i = 0; i < listGeopoints.size(); i++) {
+                    rectLine.add(listGeopoints.get(i));
+                }
+                Polyline polylin = mMap.addPolyline(rectLine);
+
+
+                // Add a marker in starting location  and move the camera
+                LatLng startLocation = new LatLng(latitudePresent, longitudePresent);
+                mMap.addMarker(new MarkerOptions().position(startLocation).title(startAddress));
+                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startLocation,15));
+                Toast.makeText(getApplicationContext(),latitudePresent+" "+longitudePresent,Toast.LENGTH_SHORT).show();
+
+                //RouteMaps md = new RouteMaps();
+                //distance =  (double)md.getDistanceValue(doc)/1609.34;
+                Distance.setText(""+Math.round(distance*100)/100.0+" miles away");
+                // Log.i("Lattitude",Double.toString(latitude));
+                //Log.i("Longitude",Double.toString(longitude));
+
+                //lat.setText(Double.toString(longitudePresent));
+                //longi.setText(Double.toString(latitudePresent));
+                // address = getCompleteAddressString(latitude, longitude);
+            }
+
+            @Override
+            public void onStatusChanged(String s, int i, Bundle bundle) {
+
+            }
+
+            @Override
+            public void onProviderEnabled(String s) {
+
+            }
+
+            @Override
+            public void onProviderDisabled(String s) {
+
+                Intent i = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                startActivity(i);
+            }
+        };
+// first check for permissions
+        //if API <23, no need of permissions
+        if (Build.VERSION.SDK_INT < 23) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, listener);
+        } else {
+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // if no permission -> ask for permission
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+            } else {
+                //if we have permissions already..if not not ask for permission result
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, listener);
+                Location lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+
+            }
+        }
+
+
+
+//mainActivity = new MainActivity();
+
+
         String output="";
         DownloadTask downloadTask = new DownloadTask();
         try {
@@ -237,22 +362,6 @@ Intent intent = getIntent();
 
 
 
-
-//        RouteMaps md = new RouteMaps();
-
-
-
-//        Document doc = md.getDocument(new LatLng(34.0380054,-84.2619869), new LatLng(39.0921167,-94.8559162),
-//                RouteMaps.MODE_DRIVING);
-
-//    ArrayList<LatLng> directionPoint = md.getDirection(d);
-//    PolylineOptions rectLine = new PolylineOptions().width(3).color(
-//            Color.RED);
-//
-//    for (int i = 0; i < directionPoint.size(); i++) {
-//        rectLine.add(directionPoint.get(i));
-//    }
-//    Polyline polylin = map.addPolyline(rectLine);
 
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
